@@ -152,7 +152,7 @@ def dense_weights_distiller(to_prune: Dense, cut_off: float):
                           new_bias=new_bias)
 
 
-def spectral_weights_distiller(to_prune: Spectral, cut_off: float, link_mode: str = 'or'):
+def spectral_weights_distiller(to_prune: Spectral, cut_off: float, link_mode: str = 'and'):
     inbound, outbound = near_layer(current_layer=to_prune)
 
     in_cond = to_prune.conditions(cut_off)["diag_start"]

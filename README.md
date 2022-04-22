@@ -1,13 +1,20 @@
 # spectraltools
 
-Representation in the reciprocal space of a fully connected layer
+Representation in the reciprocal space of a fully connected layer and toll to prune it using the 
+eigenvalues.
+The pruning function should work regardless of the model and of hte topology. If 2 or more Spectral layers inbounds on 
+the same layer their eigenvalues, and therefore their nodes, will NOT be pruned.
 
 ## Installation
-
+TODO:
 ```bash
 $ pip install spectraltools
 ```
+After downloading the repo, go with the terminal in the folder with "setup.py" and run:
 
+```bash
+$ pip install .
+```
 ## Usage
 
 - TODO

@@ -1,4 +1,4 @@
-from tensorflow.keras.models import Model, model_from_json
+from tensorflow.keras.models import Model
 from tensorflow.keras.layers import Dense, Flatten, Input, Average
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.losses import SparseCategoricalCrossentropy as scc
@@ -11,12 +11,12 @@ x_test = x_test / 255.
 inputs = Input(shape=(28, 28,))
 x = Flatten()(inputs)
 y = Spectral(200, activation='relu', name='Spec1', use_bias=False)(x)
-y = Spectral(300, activation='relu', is_diag_start_trainable=True, use_bias=False, name='Spec2')(y)
-y = Spectral(300, activation='relu', name='Dense1')(y)
+y = Spectral(300, activation='relu', use_bias=False, name='Spec2')(y)
+y = Spectral(100, activation='relu', name='Spec21')(y)
 
 x = Spectral(200, activation='relu', name='Spec3', use_bias=False)(x)
-x = Spectral(300, activation='relu', is_diag_start_trainable=True, use_bias=False, name='Spec4')(x)
-x = Spectral(300, activation='relu', name='Spec5')(x)
+x = Spectral(300, activation='relu', use_bias=False, name='Spec4')(x)
+x = Spectral(100, activation='relu', name='Spec5')(x)
 
 z = Average()([x, y])
 outputs = Dense(10, activation="softmax")(z)

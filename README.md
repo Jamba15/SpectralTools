@@ -1,6 +1,6 @@
 # spectraltools
 
-Representation in the reciprocal space of a fully connected layer and toll to prune it using the 
+Representation in the reciprocal space of a fully connected layer and tool to prune it using the 
 eigenvalues.
 The pruning function should work regardless of the model and of hte topology. If 2 or more Spectral layers inbounds on 
 the same layer their eigenvalues, and therefore their nodes, will NOT be pruned.

@@ -4,6 +4,7 @@ from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.losses import SparseCategoricalCrossentropy as scc
 from tensorflow.keras.datasets import mnist
 from spectraltools import Spectral, spectral_pruning
+
 (x_train, y_train), (x_test, y_test) = mnist.load_data()
 x_train = x_train / 255.
 x_test = x_test / 255.
@@ -15,7 +16,7 @@ y = Spectral(300, activation='relu', use_bias=False, name='Spec2')(y)
 y = Spectral(100, activation='relu', name='Spec21')(y)
 
 x = Spectral(200, activation='relu', name='Spec3', use_bias=False)(x)
-x = Spectral(300, activation='relu', use_bias=False, name='Spec4')(x)
+x = Dense(300, activation='relu', use_bias=False, name='Spec4')(x)
 x = Spectral(100, activation='relu', name='Spec5')(x)
 
 z = Average()([x, y])

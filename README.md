@@ -48,12 +48,52 @@ from spectraltools import spectral_pruning
 pruned_model = spectral_pruning(model,
                                 percentile)
 ```
-The function removes, if it can, a certain percentile of the nodes in the spectral layer. At the moment it only prunes 
-if the Spectral layer is followed or follows a Dense or Spectral layer. The nodes are removed acording to the eigenvalues
-distribution which has been empirically and heuristically proven to be an indicator of node relevance inside the network.
-If 2 or more Spectral layers inbounds on 
-the same layer their eigenvalues, and therefore their nodes, will NOT be pruned.
+model: Sequential or Functional model, employing one or more Spectral layers, that needs to be pruned.
+percentile: the percentile (1-100) of nodes that the model should try to prune. The prunable nodes are the one with 
+trainable eigenvalues.
+####Example:
+```python
+from tensorflow.keras.layers import Dense, Input
+from spectraltools import Spectral
 
+inputs = Input(shape=(784,))
+x = Dense(100, 
+          activation='relu')(inputs)
+x = Spectral(80, 
+            is_diag_start_trainable=True,
+            is_diag_end_trainable=True,
+            activation='relu')(x)
+```
+In this case the prunable nodes will be 100 (is_diag_start_trainable=True) and 80 (is_diag_end_trainable=True)<br>
+If 2 spectral layers are one next to each other the "end" eigenvalues of the preceding and the "start" fo the following
+are both taken into account.
+The function removes, if it can, a certain percentile of the nodes in every spectral layer. At the moment it only prunes 
+if the Spectral layer is followed or follows a Dense or Spectral layer. The nodes are removed according to the eigenvalues
+distribution which has been empirically and heuristically proven to be an indicator of node relevance inside the network.
+If two or more Spectral layers inbounds on the same layer, their eigenvalues, and therefore their nodes, will NOT be pruned.
+
+### Spectral pretrain
+This funtion aims at finding the must efficient subnetwork due to random initialization with a fast training of only 
+the eigenvalues inside every spectral layer in the network. *At the moment* all the parameters of the others layers will
+Not be modified and therefore every `trainable=True` weight will be trained.<br>
+The function trains only the eigenvalues of every spectral layers according to the fit_dictionary passed. 
+After that prunes an increasing precentile of the nodes untile the accuracy or the loss has dropped (or risen) 
+by a max_delta percent.
+
+```python
+from spectraltools import spectral_pretrain
+
+pruned_model = spectral_pretrain(model, 
+                                 fit_dictionary, 
+                                 eval_dictionary,
+                                 max_delta, 
+                                 compare_with='acc' )
+```
+`model`: the untrained model to be pruned
+`fit_dictionary`: the dictionary with the arguments to be passed to the `fit` method of the model.
+`eval_dictionary`: the dictionary with the arguments to be passed to the `fit` method of the model.
+`max_delta`: maximal variation of the given indicator at which break the pruning process
+`compare_with`: indicator to be used: `'loss'` or `'acc'`
 
 ## Contributing
 

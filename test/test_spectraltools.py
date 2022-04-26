@@ -28,10 +28,7 @@ model.compile(optimizer=Adam(1E-3), loss=scc(from_logits=False), metrics=["accur
 ev_dict = dict(x=x_train, y=y_train, batch_size=300)
 tr_dict = dict(x=x_train, y=y_train, validation_split=0.2, batch_size=300, epochs=1, verbose=0)
 
-minimal = spectral_pretrain(model,
-                            fit_dictionary=tr_dict,
-                            eval_dictionary=ev_dict,
-                            max_drop=40)
+minimal = spectral_pretrain(model, fit_dictionary=tr_dict, eval_dictionary=ev_dict, max_delta=40)
 
 minimal.summary()
 fitout = model.fit(x_train, y_train, validation_split=0.2, batch_size=300, epochs=1, verbose=0)

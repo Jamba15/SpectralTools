@@ -241,7 +241,7 @@ def find_spectral(model):
     return index
 
 
-def spectral_pretrain(model, fit_dictionary, eval_dictionary, max_drop, compare_with='acc'):
+def spectral_pretrain(model, fit_dictionary, eval_dictionary, max_delta, compare_with='acc'):
     spectral_layers = find_spectral(model)
     layers = layers_unwrap(model)
     for index in spectral_layers:
@@ -260,14 +260,14 @@ def spectral_pretrain(model, fit_dictionary, eval_dictionary, max_drop, compare_
     else:
         index = 0
 
-    acc = spec_only.evaluate(**eval_dictionary)[index]
-    new_acc = acc
+    indicator = spec_only.evaluate(**eval_dictionary)[index]
+    new_indic = indicator
     p = 5
 
-    while abs(new_acc - acc)/acc < (np.clip(max_drop, 0, 99)/100):
+    while abs(new_indic - indicator)/indicator < (np.clip(max_delta, 1, 99) / 100):
         new_model = spectral_pruning(spec_only, percentile=p)
-        new_acc = new_model.evaluate(**eval_dictionary)[index]
+        new_indic = new_model.evaluate(**eval_dictionary)[index]
         p += 5
-        print(abs(new_acc - acc)/acc)
+        print(abs(new_indic - indicator) / indicator)
 
     return new_model

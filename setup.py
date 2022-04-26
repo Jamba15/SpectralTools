@@ -7,7 +7,7 @@ setup(
     name="spectraltools",
     version="0.2.0",
     author="Lorenzo Giambagli",
-    description="A small example package",
+    description="Tools for train and prune in the dual space a fully connected layer.",
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/pypa/sampleproject",

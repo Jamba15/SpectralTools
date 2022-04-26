@@ -1,5 +1,6 @@
 # spectraltools
 *spectraltools* is a package for spectral training and analysis of fully connected feedforward NN.<br>
+According to our test it is well integrated in Tensorflow 2.3 
 
 ## Installation
 Activate the environment where the package is to be installed.<br>

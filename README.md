@@ -72,12 +72,12 @@ if the Spectral layer is followed or follows a Dense or Spectral layer. The node
 distribution which has been empirically and heuristically proven to be an indicator of node relevance inside the network.
 If two or more Spectral layers inbounds on the same layer, their eigenvalues, and therefore their nodes, will NOT be pruned.
 
-### Spectral pretrain
-This funtion aims at finding the must efficient subnetwork due to random initialization with a fast training of only 
+### Spectral Pre-train
+This funtion aims at finding the must efficient subnetwork due to random initialization with a pre-training of only 
 the eigenvalues inside every spectral layer in the network. *At the moment* all the parameters of the others layers will
 Not be modified and therefore every `trainable=True` weight will be trained.<br>
 The function trains only the eigenvalues of every spectral layers according to the fit_dictionary passed. 
-After that prunes an increasing precentile of the nodes untile the accuracy or the loss has dropped (or risen) 
+After that an increasing percentile of the nodes is pruned, until the accuracy or the loss has dropped (or risen) 
 by a max_delta percent.
 
 ```python
@@ -94,6 +94,7 @@ pruned_model = spectral_pretrain(model,
 `eval_dictionary`: the dictionary with the arguments to be passed to the `fit` method of the model.
 `max_delta`: maximal variation of the given indicator at which break the pruning process
 `compare_with`: indicator to be used: `'loss'` or `'acc'`
+
 
 ## Contributing
 

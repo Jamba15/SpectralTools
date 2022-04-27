@@ -4,9 +4,8 @@ According to our test it is well integrated in Tensorflow 2.3
 
 ## Installation
 Activate the environment where the package is to be installed.<br>
-After downloading the repo, go with the terminal in the folder with "setup.py" and run:
 ```bash
-$ pip install .
+$ pip install spectraltools
 ```
 # Usage
 ## Spectral layer

@@ -52,7 +52,7 @@ model: `Sequential` or `Functional` model, employing one or more Spectral layers
 percentile: the percentile (1-100) of nodes that the model should try to prune. The prunable nodes are the one with 
 trainable eigenvalues.
 
-####Example:
+###Example:
 ```python
 from tensorflow.keras.layers import Dense, Input
 from spectraltools import Spectral

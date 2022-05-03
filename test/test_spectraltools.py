@@ -1,4 +1,4 @@
-from tensorflow.keras.models import Model
+from keras.models import Model
 from tensorflow.keras.layers import Dense, Flatten, Input, Average
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.losses import SparseCategoricalCrossentropy as scc

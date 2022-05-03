@@ -20,7 +20,7 @@ setup(
         "Operating System :: OS Independent",
     ],
     packages=['spectraltools'],
-    install_requires=["tensorflow"],
+    install_requires=["tensorflow==2.3"],
     include_pachage_data=True,
     python_requires=">=3.7"
 )

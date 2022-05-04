@@ -1,5 +1,9 @@
-from tensorflow.keras.models import Model, model_from_json
-from tensorflow.keras.layers import Dense
+try:
+    from tensorflow.keras.models import Model, model_from_json
+    from tensorflow.keras.layers import Dense
+except ModuleNotFoundError:
+    from keras.models import Model, model_from_json
+    from keras.layers import Dense
 from tensorflow.keras import layers as layer_type
 import numpy as np
 from .spectraldense import Spectral

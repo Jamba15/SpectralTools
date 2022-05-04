@@ -1,5 +1,10 @@
-from tensorflow.python.keras.engine.base_layer import Layer
-from tensorflow.python.keras import initializers, regularizers, constraints, activations
+try:
+    from keras.engine.base_layer import Layer
+    from keras import initializers, regularizers, constraints, activations
+except ModuleNotFoundError:
+    from tensorflow.python.keras.engine.base_layer import Layer
+    from tensorflow.python.keras import initializers, regularizers, constraints, activations
+
 from tensorflow.python.util.tf_export import keras_export
 from tensorflow import multiply as mul
 from tensorflow import reduce_sum

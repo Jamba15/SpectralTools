@@ -14,13 +14,15 @@ Requires-Python: >=3.7
 Description-Content-Type: text/markdown
 License-File: LICENSE
 
+[![GitHub version](https://badge.fury.io/gh/Jamba15%2FSpectralTools.svg)](https://badge.fury.io/gh/Jamba15%2FSpectralTools)
+[![PyPI version](https://badge.fury.io/py/spectraltools.svg)](https://badge.fury.io/py/spectraltools)
+
 # spectraltools
 *spectraltools* is a package for spectral training and analysis of fully connected feedforward NN.<br>
 According to our test it is well integrated in Tensorflow 2.3 
 
 ## Installation
 Activate the environment where the package is to be installed.<br>
-After downloading the repo, go with the terminal in the folder with "setup.py" and run:
 ```bash
 $ pip install spectraltools
 ```
@@ -48,6 +50,7 @@ It implements the operation: <code> output = activation(dot(input, spectral_kern
 <code>diag_in</code> and <code>diag_out</code> are the eigenvalues of the adjacency matrix representing the layer and
 base are the nontrivial components of its eigenvectors. `bias` is a bias vector created by the layer 
 (only applicable if `use_bias` is `True`).
+
 ### Attributes description
 If `is_base_trainable=True` the eigenvectors of the adjacency matrix will be trained. Those are `input_dim x output_dim`
 trainable parameters.<br>
@@ -64,10 +67,11 @@ from spectraltools import spectral_pruning
 pruned_model = spectral_pruning(model,
                                 percentile)
 ```
-model: Sequential or Functional model, employing one or more Spectral layers, that needs to be pruned.
+model: `Sequential` or `Functional` model, employing one or more Spectral layers, that needs to be pruned.
 percentile: the percentile (1-100) of nodes that the model should try to prune. The prunable nodes are the one with 
 trainable eigenvalues.
-####Example:
+
+#### Example:
 ```python
 from tensorflow.keras.layers import Dense, Input
 from spectraltools import Spectral
@@ -80,7 +84,8 @@ x = Spectral(80,
             is_diag_end_trainable=True,
             activation='relu')(x)
 ```
-In this case the prunable nodes will be 100 (is_diag_start_trainable=True) and 80 (is_diag_end_trainable=True)<br>
+
+In this case the prunable nodes will be 100 (`is_diag_start_trainable=True`) and 80 (`is_diag_end_trainable=True`)<br>
 If 2 spectral layers are one next to each other the "end" eigenvalues of the preceding and the "start" fo the following
 are both taken into account.
 The function removes, if it can, a certain percentile of the nodes in every spectral layer. At the moment it only prunes 
@@ -89,6 +94,7 @@ distribution which has been empirically and heuristically proven to be an indica
 If two or more Spectral layers inbounds on the same layer, their eigenvalues, and therefore their nodes, will NOT be pruned.
 
 ### Spectral Pre-train
+
 This funtion aims at finding the must efficient subnetwork due to random initialization with a pre-training of only 
 the eigenvalues inside every spectral layer in the network. *At the moment* all the parameters of the others layers will
 Not be modified and therefore every `trainable=True` weight will be trained.<br>
@@ -122,6 +128,6 @@ Interested in contributing? Check out the contributing guidelines. Please note t
 
 ## Credits
 
-`spectraltools` was created with [`cookiecutter`](https://cookiecutter.readthedocs.io/en/latest/) and the `py-pkgs-cookiecutter` [template](https://github.com/py-pkgs/py-pkgs-cookiecutter).
+`spectraltools` was created with [`cookiecutter`] (https://cookiecutter.readthedocs.io/en/latest/) and the `py-pkgs-cookiecutter` [template](https://github.com/py-pkgs/py-pkgs-cookiecutter).
 
 

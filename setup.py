@@ -5,7 +5,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setup(
     name="spectraltools",
-    version="0.2.1",
+    version="0.3.0",
     author="Lorenzo Giambagli",
     description="Tools for train and prune in the dual space a fully connected layer.",
     long_description=long_description,

@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: spectraltools
-Version: 0.2.1
+Version: 0.4.0
 Summary: Tools for train and prune in the dual space a fully connected layer.
 Home-page: https://github.com/pypa/sampleproject
 Author: Lorenzo Giambagli

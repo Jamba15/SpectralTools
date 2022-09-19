@@ -5,7 +5,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setup(
     name="spectraltools",
-    version="0.3.0",
+    version="0.4.1",
     author="Lorenzo Giambagli",
     description="Tools for train and prune in the dual space a fully connected layer.",
     long_description=long_description,
@@ -20,7 +20,6 @@ setup(
         "Operating System :: OS Independent",
     ],
     packages=['spectraltools'],
-    # install_requires=["tensorflow-gpu"],
     include_pachage_data=True,
     python_requires=">=3.7"
 )

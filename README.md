@@ -101,6 +101,11 @@ pruned_model = spectral_pretrain(model,
 `max_delta`: maximal variation of the given indicator at which break the pruning process
 `compare_with`: indicator to be used: `'loss'` or `'acc'`
 
+### Spectral Distillation
+This function realize a two step training procedure. In step 1) a *pre train* using only eigenvalues is done.
+After that a fixed percentile of network (in terms of nodes) is removed according to the eigenvalues magnitude criteria.<br>
+The step 2) consist, then, in a *full training* of the leftover network, namely employing also eigenvectors. Again, at the moment,
+all the parameters of the others layers will Not be modified and therefore every `trainable=True` weight will be trained.
 
 ## Contributing
 

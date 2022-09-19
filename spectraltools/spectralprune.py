@@ -15,7 +15,6 @@ class dense_assigner:
                  new_kernel,
                  new_bias,
                  index=None):
-
         self.new_shape = new_shape
         self.new_kernel = new_kernel
         self.new_bias = new_bias
@@ -35,7 +34,6 @@ class spectral_assigner:
                  new_diag_end,
                  new_bias,
                  index=None):
-
         self.new_shape = new_shape
         self.index = index
         self.new_base = new_base
@@ -88,7 +86,8 @@ def eigenvalue_cutoff(model: Model, perc):
 
     for ind, lay in enumerate(layers):
         inbound, outbound = near_layer(lay)
-        if type(inbound).__name__ == 'Spectral' or type(outbound).__name__ == 'Spectral' or type(lay).__name__ == 'Spectral':
+        if type(inbound).__name__ == 'Spectral' or type(outbound).__name__ == 'Spectral' or type(
+                lay).__name__ == 'Spectral':
             index_list.append({"index": ind,
                                "layer": type(lay).__name__})
 
@@ -151,7 +150,7 @@ def dense_weights_distiller(to_prune: Dense, cut_off: float):
     else:
         new_bias = None
 
-    return dense_assigner(new_shape=np.sum(out_cond*1),
+    return dense_assigner(new_shape=np.sum(out_cond * 1),
                           new_kernel=new_kernel,
                           new_bias=new_bias)
 
@@ -184,7 +183,7 @@ def spectral_weights_distiller(to_prune: Spectral, cut_off: float, link_mode: st
     else:
         new_bias = None
 
-    return spectral_assigner(new_shape=np.sum(out_cond*1),
+    return spectral_assigner(new_shape=np.sum(out_cond * 1),
                              new_base=new_base,
                              new_diag_end=new_diag_end,
                              new_diag_start=new_diag_start,
@@ -245,7 +244,11 @@ def find_spectral(model):
     return index
 
 
-def spectral_pretrain(model, fit_dictionary, eval_dictionary, max_delta, compare_with='acc'):
+def spectral_pretrain(model,
+                      fit_dictionary,
+                      eval_dictionary,
+                      max_delta,
+                      compare_with='acc'):
     spectral_layers = find_spectral(model)
     layers = layers_unwrap(model)
     for index in spectral_layers:
@@ -268,10 +271,56 @@ def spectral_pretrain(model, fit_dictionary, eval_dictionary, max_delta, compare
     new_indic = indicator
     p = 5
 
-    while abs(new_indic - indicator)/indicator < (np.clip(max_delta, 1, 99) / 100):
+    while abs(new_indic - indicator) / indicator < (np.clip(max_delta, 1, 99) / 100):
         new_model = spectral_pruning(spec_only, percentile=p)
         new_indic = new_model.evaluate(**eval_dictionary)[index]
         p += 5
         print(abs(new_indic - indicator) / indicator)
 
     return new_model
+
+
+def spectral_distiller(model,
+                       fit_dictionary,
+                       percentile):
+    """
+    :param model: The Sequential or Functional model to be pruned.
+    :param fit_dictionary: the dictionary containing the fit instructions
+    :param percentile: Percentile of nodes to be pruned using the eigenvalues as a criteria
+    :return: The trained pruned model
+    """
+    spectral_layers = find_spectral(model)
+    layers = layers_unwrap(model)
+
+    for index in spectral_layers:
+        current: Spectral = layers[index]
+        current.is_base_trainable = False
+        current.is_diag_end_trainable = True
+        current.is_diag_start_trainable = False
+
+    new_json = model.to_json()
+    custom_objects = {'Spectral': Spectral}
+    spec_only = model_from_json(new_json,
+                                custom_objects=custom_objects)
+
+    spec_only.compile(**model._get_compile_args())
+    spec_only.fit(**fit_dictionary)
+    pruned_model = spectral_pruning(spec_only, percentile=percentile)
+
+    spectral_layers = find_spectral(pruned_model)
+    layers = layers_unwrap(pruned_model)
+
+    for index in spectral_layers:
+        current: Spectral = layers[index]
+        current.is_base_trainable = True
+        current.is_diag_end_trainable = True
+        current.is_diag_start_trainable = False
+
+    new_json = pruned_model.to_json()
+    custom_objects = {'Spectral': Spectral}
+    final_model = model_from_json(new_json,
+                                  custom_objects=custom_objects)
+
+    final_model.compile(**pruned_model._get_compile_args())
+    final_model.fit(**fit_dictionary)
+    return final_model

@@ -1,9 +1,10 @@
-[![GitHub version](https://badge.fury.io/gh/Jamba15%2FSpectralTools.svg)](https://badge.fury.io/gh/Jamba15%2FSpectralTools)
 [![PyPI version](https://badge.fury.io/py/spectraltools.svg)](https://badge.fury.io/py/spectraltools)
+![TensorFlow Version](https://img.shields.io/badge/TensorFlow-2.10-orange)
+![Python Version](https://img.shields.io/badge/Python-3.10-blue)
 
 # spectraltools
 *spectraltools* is a package for spectral training and analysis of fully connected feedforward NN.<br>
-According to our test it is well integrated in Tensorflow 2.3 
+According to our test it is well integrated in `Tensorflow 2.10` and older versions up to `Tensorflow 2.3`.
 
 ## Installation
 Activate the environment where the package is to be installed.<br>
@@ -22,39 +23,55 @@ The layer can be used inside a Tensorflow model and has three main attributes:
 from spectraltools import Spectral
 Spectral(
     units=300,
-    activation=None,
+    activation='relu',
     is_base_trainable=True,
-    is_diag_start_trainable=False,
     is_diag_end_trainable=True,
     use_bias=False
 )
 ~~~
+In this configuration the layer is a fully connected layer with 300 nodes and ReLU activation function. The layer is equivalent to a dense 
+layer with a scalar parameter that multiplies the features. The layer is initialized with a random base and eigenvalues
+equal to one (namely the initialization is equivalent to a fully-connected layer).<br>
 It implements the operation: <code> output = activation(dot(input, spectral_kernel) + bias) </code> where 
 <code>spectral_kernel = dot(base, diag_in) - dot(diag_out, base)</code>.
 <code>diag_in</code> and <code>diag_out</code> are the eigenvalues of the adjacency matrix representing the layer and
 base are the nontrivial components of its eigenvectors. `bias` is a bias vector created by the layer 
-(only applicable if `use_bias` is `True`).
+(only applicable if `use_bias` is `True`).<br>
+This configuration (where the eigenvectors and the diag_end are trained) is the one suggested and for which the 
+pruning function are developed. In the future other configurations support will be added.<br>
 
 ### Attributes description
-If `is_base_trainable=True` the eigenvectors of the adjacency matrix will be trained. Those are `input_dim x output_dim`
+If `is_base_trainable=True` the eigenvectors of the adjacency matrix will be trained. This is equivalent to the
+training of all the connections (features). Those are `input_dim x output_dim`
 trainable parameters.<br>
-is_diag_start_trainable train the first input_dim eigenvalues of the matrix and is_diag_end_trainable trains the last 
-output_dim eigenvalues. The total number of trainable parameters is therefore `input_dim x output_dim + input_dim + output_dim`.
+`is_diag_start_trainable` (default set to `False`) train the first `input_dim` eigenvalues of the matrix and `is_diag_end_trainable` trains the last 
+`output_dim` eigenvalues. The total number of trainable parameters is therefore `input_dim x output_dim + input_dim + output_dim`.
 If only the eigenvalues are trained the number of free parameters drops but the learning still occurs. A 
 suboptimal loss minimum is reached but overfitting is less likely to occur. If also eigenvectors are trained the layer
 is, from a training point of view, the same as the Dense.<br>
 
 ## Spectral Pruning
-The pruning function should work regardless of the model and of hte topology. It can be called as follows:
+The pruning function are tested with **Functional** or **Sequential** models implementing one or more Spectral layers.
+Best pruning results are achived when also an L2 regularization is applied to the spectral layer parameters: base and eigenvalues.
+There are two ways in which the pruning can be done:
+1. **Percentile based Pruning**: the pruning is done according to the eigenvalues distribution of every spectral layer in
+the model. The nodes with the smallest eigenvalues magnitude (according to the percentile given) are removed. The percentile of nodes to be removed is passed as
+an argument to the function.
+It can be called as follows:
 ```python
-from spectraltools import spectral_pruning
-pruned_model = spectral_pruning(model,
-                                percentile)
+from spectraltools import prune_percentile, 
+
+# In place pruning
+prune_percentile(model,
+                percentile_threshold)
+# Copy pruning
+pruned_copy = prune_percentile(model,
+                               percentile_threshold,
+                               copy=True)
 ```
 model: `Sequential` or `Functional` model, employing one or more Spectral layers, that needs to be pruned.
-percentile: the percentile (1-100) of nodes that the model should try to prune. The prunable nodes are the one with 
-trainable eigenvalues.
-
+percentile_threshold: the percentile (1-100) of nodes that the model should try to prune. The pruning is done by masking 
+the eigenvalues of the spectral layers which is equivalent to set all the corresponding features and biases to 0. <br>
 #### Example:
 ```python
 from tensorflow.keras.layers import Dense, Input
@@ -64,52 +81,33 @@ inputs = Input(shape=(784,))
 x = Dense(100, 
           activation='relu')(inputs)
 x = Spectral(80, 
-            is_diag_start_trainable=True,
-            is_diag_end_trainable=True,
             activation='relu')(x)
 ```
 
-In this case the prunable nodes will be 100 (`is_diag_start_trainable=True`) and 80 (`is_diag_end_trainable=True`)<br>
-If 2 spectral layers are one next to each other the "end" eigenvalues of the preceding and the "start" fo the following
-are both taken into account.
-The function removes, if it can, a certain percentile of the nodes in every spectral layer. At the moment it only prunes 
-if the Spectral layer is followed or follows a Dense or Spectral layer. The nodes are removed according to the eigenvalues
+In this case the prunable nodes will be 80.<br>
+The nodes are removed according to the eigenvalues
 distribution which has been empirically and heuristically proven to be an indicator of node relevance inside the network.
-If two or more Spectral layers inbounds on the same layer, their eigenvalues, and therefore their nodes, will NOT be pruned.
 
-### Spectral Pre-train
-
-This funtion aims at finding the must efficient subnetwork due to random initialization with a pre-training of only 
-the eigenvalues inside every spectral layer in the network. *At the moment* all the parameters of the others layers will
-Not be modified and therefore every `trainable=True` weight will be trained.<br>
-The function trains only the eigenvalues of every spectral layers according to the fit_dictionary passed. 
-After that an increasing percentile of the nodes is pruned, until the accuracy or the loss has dropped (or risen) 
-by a max_delta percent.
-
+2. **Metric based Pruning**: the pruning is done according to the impact that the removal of a node has on the loss or another 
+metric calculated on the dataset. The nodes with the smallest impact are removed. The impact is calculated by training the model on a validation set.
+that is given.
 ```python
-from spectraltools import spectral_pretrain
-
-pruned_model = spectral_pretrain(model, 
-                                 fit_dictionary, 
-                                 eval_dictionary,
-                                 max_delta, 
-                                 compare_with='acc' )
+from spectraltools import metric_based_pruning
+metric_based_pruning(model,
+                     eval_dictionary,
+                     compare_metric='accuracy',
+                     max_delta_percent=10,
+                     **kwargs)
 ```
-`model`: the untrained model to be pruned
-`fit_dictionary`: the dictionary with the arguments to be passed to the `fit` method of the model.
-`eval_dictionary`: the dictionary with the arguments to be passed to the `fit` method of the model.
-`max_delta`: maximal variation of the given indicator at which break the pruning process
-`compare_with`: indicator to be used: `'loss'` or `'acc'`
-
-### Spectral Distillation
-This function realize a two step training procedure. In step 1) a *pre train* using only eigenvalues is done.
-After that a fixed percentile of network (in terms of nodes) is removed according to the eigenvalues magnitude criteria.<br>
-The step 2) consist, then, in a *full training* of the leftover network, namely employing also eigenvectors. Again, at the moment,
-all the parameters of the others layers will Not be modified and therefore every `trainable=True` weight will be trained.
+`model`: the trained model to be pruned.<br>
+`eval_dictionary`: the dictionary with the arguments to be passed to the `evaluate` method of the model.<br>
+`max_delta_percent`: maximal variation of the given indicator at which break the pruning process.<br>
+`compare_metric`: indicator to be used (the corresponding metric name should be used while compiling the model) <br>
 
 ## Contributing
 
-Interested in contributing? Check out the contributing guidelines. Please note that this project is released with a Code of Conduct. By contributing to this project, you agree to abide by its terms.
+Interested in contributing? Check out the contributing guidelines. Please note that this project is released with a Code of Conduct. 
+By contributing to this project, you agree to abide by its terms.
 
 ## License
 

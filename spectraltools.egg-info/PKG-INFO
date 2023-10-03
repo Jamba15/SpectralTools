@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: spectraltools
-Version: 0.4.0
+Version: 0.4.1
 Summary: Tools for train and prune in the dual space a fully connected layer.
 Home-page: https://github.com/pypa/sampleproject
 Author: Lorenzo Giambagli
@@ -95,7 +95,7 @@ If two or more Spectral layers inbounds on the same layer, their eigenvalues, an
 
 ### Spectral Pre-train
 
-This funtion aims at finding the must efficient subnetwork due to random initialization with a pre-training of only 
+This function aims at finding the must efficient subnetwork due to random initialization with a pre-training of only 
 the eigenvalues inside every spectral layer in the network. *At the moment* all the parameters of the others layers will
 Not be modified and therefore every `trainable=True` weight will be trained.<br>
 The function trains only the eigenvalues of every spectral layers according to the fit_dictionary passed. 
@@ -111,16 +111,35 @@ pruned_model = spectral_pretrain(model,
                                  max_delta, 
                                  compare_with='acc' )
 ```
-`model`: the untrained model to be pruned
-`fit_dictionary`: the dictionary with the arguments to be passed to the `fit` method of the model.
-`eval_dictionary`: the dictionary with the arguments to be passed to the `fit` method of the model.
-`max_delta`: maximal variation of the given indicator at which break the pruning process
-`compare_with`: indicator to be used: `'loss'` or `'acc'`
+`model`: the untrained model to be pruned.<br>
+`fit_dictionary`: the dictionary with the arguments to be passed to the `fit` method of the model.<br>
+`eval_dictionary`: the dictionary with the arguments to be passed to the `fit` method of the model.<br>
+`max_delta`: maximal variation of the given indicator at which break the pruning process.<br>
+`compare_with`: indicator to be used: `'loss'` or `'acc'`.<br>
 
+### Spectral Distillation
+This function realize a two step training procedure. In step 1) a *pre train* using only eigenvalues is done.
+After that a fixed percentile of network (in terms of nodes) is removed according to the eigenvalues magnitude criteria.<br>
+The step 2) consist, then, in a *full training* of the leftover network, namely employing also eigenvectors. Again, at the moment,
+all the parameters of the others layers will Not be modified and therefore every `trainable=True` weight will be trained.
+
+```python
+from spectraltools import spectral_distiller
+
+pruned_model = spectral_distiller(model, 
+                                  fit_dictionary, 
+                                  percentile=85)
+```
+
+`model`: the untrained model to be pruned.<br>
+`fit_dictionary`: the dictionary with the arguments to be passed to the `fit` method of the model.<br>
+`percentile`: which percentage of nodes to be removed after the eigenvalue-only training and before the full training
+of the leftover network.<br>
 
 ## Contributing
 
-Interested in contributing? Check out the contributing guidelines. Please note that this project is released with a Code of Conduct. By contributing to this project, you agree to abide by its terms.
+Interested in contributing? Check out the contributing guidelines. Please note that this project is released with a Code of Conduct. 
+By contributing to this project, you agree to abide by its terms.
 
 ## License
 

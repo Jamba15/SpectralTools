@@ -1,58 +1,18 @@
+import warnings
+
 try:
     from tensorflow.keras.models import Model, model_from_json
     from tensorflow.keras.layers import Dense
 except ModuleNotFoundError:
     from keras.models import Model, model_from_json
     from keras.layers import Dense
-from tensorflow.keras import layers as layer_type
 import numpy as np
 from .spectraldense import Spectral
 
 
-class dense_assigner:
-    def __init__(self,
-                 new_shape,
-                 new_kernel,
-                 new_bias,
-                 index=None):
-        self.new_shape = new_shape
-        self.new_kernel = new_kernel
-        self.new_bias = new_bias
-        self.index = index
-
-    def assign(self, layer: Dense):
-        layer.kernel.assign(self.new_kernel)
-        if self.new_bias is not None:
-            layer.bias.assign(self.new_bias)
-
-
-class spectral_assigner:
-    def __init__(self,
-                 new_shape,
-                 new_base,
-                 new_diag_start,
-                 new_diag_end,
-                 new_bias,
-                 index=None):
-        self.new_shape = new_shape
-        self.index = index
-        self.new_base = new_base
-        self.new_diag_start = new_diag_start
-        self.new_diag_end = new_diag_end
-        self.new_bias = new_bias
-
-    def assign(self, layer: Spectral):
-        layer.base.assign(self.new_base)
-        layer.diag_start.assign(self.new_diag_start)
-        layer.diag_end.assign(self.new_diag_end)
-
-        if self.new_bias is not None:
-            layer.bias.assign(self.new_bias)
-
-
 def layers_unwrap(model: Model):
     """
-    Return all the layers, including nested, in a model
+    Return all the layers, including nested, in a TensorFlow FUNCTIONAL or SEQUENTIAL model.
     :param model: model to be analyzed
     :return: the list of all the layers
     """
@@ -71,256 +31,121 @@ def eigenvalue_cutoff(model: Model, perc):
     retrieve the spectral layers in the correct order in the future.
     :param model: model in which eigenvalues cutoff will be calculated (excluded last layer)
     :param perc: percentile of eigenvalues (nodes) to be removed between every Spectral layer
-    :return: the cutoff value
+    :return: the cutoff value and the spectral layers indexes in the model
     """
     index_list = []
     eigvals = []
     layers = layers_unwrap(model)
 
+    # Cycle through all the layers. If a layer is spectral, save the eigenvalues and
+    # the index of the layer in the model.
     for ind, lay in enumerate(layers):
         try:
-            if lay.is_diag_end_trainable and (len(lay.outbound_nodes) != 0):
-                eigvals.append(lay.return_diag())
+            if isinstance(lay, Spectral):
+                eigvals.append(lay.diag_end.numpy().squeeze())
+                index_list.append({"index": ind,
+                                   "layer": type(lay).__name__})
         except AttributeError:
             pass
 
-    for ind, lay in enumerate(layers):
-        inbound, outbound = near_layer(lay)
-        if type(inbound).__name__ == 'Spectral' or type(outbound).__name__ == 'Spectral' or type(
-                lay).__name__ == 'Spectral':
-            index_list.append({"index": ind,
-                               "layer": type(lay).__name__})
+    eigvals = np.concatenate(eigvals, axis=0).flatten()
 
-    return np.percentile(abs(np.concatenate(eigvals, axis=0)), np.clip(perc, 0, 100), 0), index_list
+    # Calculate the cutoff value
+    cut_off = np.percentile(abs(eigvals), np.clip(perc, 0, 100), 0)
 
+    percent = np.sum(abs(eigvals) < cut_off) / len(eigvals) * 100
+    print(f"Number of nodes masked: {np.sum(abs(eigvals) < cut_off)} out of {len(eigvals)} ({percent:.2f}%)")
 
-def compare_eigenvalues(previous_layer: Spectral,
-                        next_layer: Spectral,
-                        cut_off: float,
-                        mode: str):
-    condition_start = previous_layer.conditions(cut_off)["diag_end"]
-    condition_end = next_layer.conditions(cut_off)["diag_start"]
-
-    if mode == 'or':
-        return np.logical_or(condition_start, condition_end)
-
-    elif mode == 'and':
-        return np.logical_and(condition_start, condition_end)
-
-    else:
-        raise AttributeError('Insert a valid mode: or - and')
+    return cut_off, index_list
 
 
-def near_layer(current_layer: layer_type):
-    list_next = current_layer.outbound_nodes
-    list_previous = current_layer.inbound_nodes
-    inbound = None
-    outbound = None
-    if (len(list_next) > 1 or len(list_previous) > 1) and type(current_layer).__name__ == "Spectral":
-        raise ValueError('Branched spectral non supported')
-    else:
-        if len(list_next) != 0 and list_next:
-            outbound = list_next[0].outbound_layer
+def prune_percentile(model: Model, percentile_threshold: float, create_copy=False):
+    """
+    Prune the model based on a percentile of eigenvalues between each Spectral layer.
+    The function either modifies the model in place or returns a pruned copy based on the `create_copy` flag.
 
-        if len(list_previous) != 0:
-            inbound = list_previous[0].inbound_layers
-    return inbound, outbound
+    :param model: The neural network model to be pruned
+    :param percentile_threshold: Percentile for pruning
+    :param create_copy: If true, creates a pruned copy of the model without modifying the original
+    :return: Optionally returns the pruned model copy
+    """
+    if percentile_threshold < 0 or percentile_threshold > 100:
+        raise ValueError("Percentile must be between 0 and 100.")
 
+    cut_off, index_list = eigenvalue_cutoff(model, percentile_threshold)
 
-def dense_weights_distiller(to_prune: Dense, cut_off: float):
-    inbound, outbound = near_layer(current_layer=to_prune)
+    target_model = model
+    if create_copy:
+        json_config = model.to_json()
+        target_model = model_from_json(json_config, custom_objects={'Spectral': Spectral})
+        target_model.set_weights(model.get_weights())
 
-    if type(inbound).__name__ == "Spectral":
-        in_cond = inbound.conditions(cut_off)["diag_end"]
-    else:
-        in_cond = np.ones(shape=to_prune.input_shape[1],
-                          dtype=bool)
+    layers = layers_unwrap(target_model)
 
-    if type(outbound).__name__ == "Spectral":
-        out_cond = outbound.conditions(cut_off)["diag_start"]
-    else:
-        out_cond = np.ones(shape=to_prune.output_shape[1],
-                           dtype=bool)
+    for indx in index_list:
+        layers[indx['index']].mask_diag_end(cut_off)
 
-    new_kernel = to_prune.kernel.numpy()[:, out_cond]
-    new_kernel = new_kernel[in_cond, :]
+    # Using a private method to extract the compile arguments from the original model
+    target_model.compile(**model._get_compile_args())
 
-    if to_prune.bias is not None:
-        new_bias = to_prune.bias.numpy()[out_cond]
-    else:
-        new_bias = None
-
-    return dense_assigner(new_shape=np.sum(out_cond * 1),
-                          new_kernel=new_kernel,
-                          new_bias=new_bias)
+    if create_copy:
+        return target_model
 
 
-def spectral_weights_distiller(to_prune: Spectral, cut_off: float, link_mode: str = 'and'):
-    inbound, outbound = near_layer(current_layer=to_prune)
+def metric_based_pruning(model: Model,
+                         eval_dictionary: dict,
+                         compare_metric='accuracy',
+                         max_delta_percent=10,
+                         **kwargs):
+    """
+    This function prunes the model based on the metric specified in the compare_metric parameter. The pruning is then
+    iterated until the metric does not change more than max_delta_percent. The model is modified in place my masking
+    the nodes with the lowest eigenvalues.
+    :param model:
+    `dict(x=x_train, y=y_train, batch_size=300, epochs=10, verbose=0)`
+    :param compare_metric: Can be either 'loss' or 'accuracy'
+    :param max_delta_percent: Maximum delta in the metric before stopping the pruning
+    :param eval_dictionary: Dictionary containing the evaluation parameters.
+    :param kwargs: Optional arguments for the percentile_step (default 5)
+    :return:
+    """
 
-    in_cond = to_prune.conditions(cut_off)["diag_start"]
-    out_cond = to_prune.conditions(cut_off)["diag_end"]
+    # Get the metric from the model
+    if compare_metric not in model.metrics_names:
+        raise ValueError(f"Metric {compare_metric} not found in model.metrics_names. "
+                         f"Available metrics are {model.metrics_names}")
+    # extract the corresponding index
+    metrix_index = model.metrics_names.index(compare_metric)
+    initial_metric_value = model.evaluate(**eval_dictionary)[metrix_index]
 
-    if type(inbound).__name__ == "Spectral":
-        in_cond = compare_eigenvalues(previous_layer=inbound,
-                                      next_layer=to_prune,
-                                      cut_off=cut_off,
-                                      mode=link_mode)
-
-    if type(outbound).__name__ == "Spectral":
-        out_cond = compare_eigenvalues(previous_layer=to_prune,
-                                       next_layer=outbound,
-                                       cut_off=cut_off,
-                                       mode=link_mode)
-
-    new_diag_start = to_prune.diag_start.numpy()[in_cond, :]
-    new_diag_end = to_prune.diag_end.numpy()[:, out_cond]
-    new_base = to_prune.base.numpy()[:, out_cond]
-    new_base = new_base[in_cond, :]
-
-    if to_prune.bias is not None:
-        new_bias = to_prune.bias.numpy()[out_cond]
-    else:
-        new_bias = None
-
-    return spectral_assigner(new_shape=np.sum(out_cond * 1),
-                             new_base=new_base,
-                             new_diag_end=new_diag_end,
-                             new_diag_start=new_diag_start,
-                             new_bias=new_bias)
-
-
-def spectral_pruning(model: Model, percentile: int):
-    cut_off, index_list = eigenvalue_cutoff(model, percentile)
-    new_weights = []
-    layers = layers_unwrap(model)
-
-    # Creating the new .json file
-    for lay in index_list:
-        if lay["layer"] == 'Spectral':
-            new_assigner = spectral_weights_distiller(layers[lay['index']], cut_off)
-        elif lay["layer"] == 'Dense':
-            new_assigner = dense_weights_distiller(layers[lay['index']], cut_off)
+    # Prune the model with a for loop until the metric does not change more than max_delta_percent. The loop is on the
+    # percentile of eigenvalues to be removed.
+    for perc in range(0, 100, kwargs.get('percentile_step', 5)):
+        prune_percentile(model, perc)
+        new_metric_value = model.evaluate(**eval_dictionary, verbose=0)[metrix_index]
+        current_delta = (abs(new_metric_value - initial_metric_value) / initial_metric_value) * 100
+        if current_delta > max_delta_percent:
+            # restore the model to the iteration before
+            if perc - 5 < 0:
+                prune_percentile(model, 0)
+                print("The model has not be pruned, percentile is set to 0. Maybe the max_delta_percent is too low.")
+            else:
+                prune_percentile(model, perc - 5)
+            break
         else:
-            continue
-        new_assigner.index = lay['index']
-        new_weights.append(new_assigner)
+            print(
+                f"Pruning with {perc}% of eigenvalues removed. Delta in {model.metrics_names[metrix_index]}: {current_delta:.2f}%")
 
-        to_reshape = layers[new_assigner.index]
-        to_reshape.units = new_assigner.new_shape
 
-    new_json = model.to_json()
-
-    # Creating the new smaller model
-
-    custom_objects = {'Spectral': Spectral}
-    new_model = model_from_json(new_json, custom_objects=custom_objects)
-    new_layers = layers_unwrap(new_model)
-
-    # Import pruned weights
-    for assigner in new_weights:
-        pruned = new_layers[assigner.index]
-        assigner.assign(pruned)
-
-    # Import all the others
-    to_jump = [lay["index"] for lay in index_list]
-
-    for n, lay in enumerate(new_layers):
+def original_model(model: Model):
+    """
+    Remove the pruning mask from the model. The model is modified in place.
+    :param model:
+    :return:
+    """
+    layers = layers_unwrap(model)
+    for lay in layers:
         try:
-            to_jump.index(n)
-        except ValueError:
-            lay.set_weights(layers[n].get_weights())
-
-    new_model.compile(**model._get_compile_args())
-    return new_model
-
-
-def find_spectral(model):
-    layers = layers_unwrap(model)
-    index = []
-    for ind, lay in enumerate(layers):
-        if type(lay).__name__ == 'Spectral':
-            index.append(ind)
-    return index
-
-
-def spectral_pretrain(model,
-                      fit_dictionary,
-                      eval_dictionary,
-                      max_delta,
-                      compare_with='acc'):
-    spectral_layers = find_spectral(model)
-    layers = layers_unwrap(model)
-    for index in spectral_layers:
-        current: Spectral = layers[index]
-        current.is_base_trainable = False
-        current.is_diag_end_trainable = True
-        current.is_diag_start_trainable = False
-
-    new_json = model.to_json()
-    custom_objects = {'Spectral': Spectral}
-    spec_only = model_from_json(new_json, custom_objects=custom_objects)
-    spec_only.compile(**model._get_compile_args())
-    spec_only.fit(**fit_dictionary)
-    if compare_with == 'acc':
-        index = 1
-    else:
-        index = 0
-
-    indicator = spec_only.evaluate(**eval_dictionary)[index]
-    new_indic = indicator
-    p = 5
-
-    while abs(new_indic - indicator) / indicator < (np.clip(max_delta, 1, 99) / 100):
-        new_model = spectral_pruning(spec_only, percentile=p)
-        new_indic = new_model.evaluate(**eval_dictionary)[index]
-        p += 5
-        print(abs(new_indic - indicator) / indicator)
-
-    return new_model
-
-
-def spectral_distiller(model,
-                       fit_dictionary,
-                       percentile):
-    """
-    :param model: The Sequential or Functional model to be pruned.
-    :param fit_dictionary: the dictionary containing the fit instructions
-    :param percentile: Percentile of nodes to be pruned using the eigenvalues as a criteria
-    :return: The trained pruned model
-    """
-    spectral_layers = find_spectral(model)
-    layers = layers_unwrap(model)
-
-    for index in spectral_layers:
-        current: Spectral = layers[index]
-        current.is_base_trainable = False
-        current.is_diag_end_trainable = True
-        current.is_diag_start_trainable = False
-
-    new_json = model.to_json()
-    custom_objects = {'Spectral': Spectral}
-    spec_only = model_from_json(new_json,
-                                custom_objects=custom_objects)
-
-    spec_only.compile(**model._get_compile_args())
-    spec_only.fit(**fit_dictionary)
-    pruned_model = spectral_pruning(spec_only, percentile=percentile)
-
-    spectral_layers = find_spectral(pruned_model)
-    layers = layers_unwrap(pruned_model)
-
-    for index in spectral_layers:
-        current: Spectral = layers[index]
-        current.is_base_trainable = True
-        current.is_diag_end_trainable = True
-        current.is_diag_start_trainable = False
-
-    new_json = pruned_model.to_json()
-    custom_objects = {'Spectral': Spectral}
-    final_model = model_from_json(new_json,
-                                  custom_objects=custom_objects)
-
-    final_model.compile(**pruned_model._get_compile_args())
-    final_model.fit(**fit_dictionary)
-    return final_model
+            lay.diag_end_mask = None
+        except AttributeError:
+            pass

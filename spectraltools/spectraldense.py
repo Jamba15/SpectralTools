@@ -22,9 +22,10 @@ class Spectral(Layer):
                  is_diag_start_trainable=False,
                  is_diag_end_trainable=True,
                  use_bias=False,
+                 eigenvalue_mask=None,
                  base_initializer='GlorotUniform',
                  diag_start_initializer='Zeros',
-                 diag_end_initializer='GlorotUniform',
+                 diag_end_initializer='Ones',
                  bias_initializer='Zeros',
                  base_regularizer=None,
                  diag_regularizer=None,
@@ -49,7 +50,7 @@ class Spectral(Layer):
         self.diag_start_initializer = initializers.get(diag_start_initializer),
         self.diag_end_initializer = initializers.get(diag_end_initializer),
         self.bias_initializer = initializers.get(bias_initializer),
-        # Regularizer
+        # Regularizers
         self.base_regularizer = regularizers.get(base_regularizer)
         self.diag_regularizer = regularizers.get(diag_regularizer)
         self.bias_regularizer = regularizers.get(bias_regularizer)
@@ -57,6 +58,8 @@ class Spectral(Layer):
         self.base_constraint = constraints.get(base_constraint)
         self.diag_constraint = constraints.get(diag_constraint)
         self.bias_constraint = constraints.get(bias_constraint)
+        # Mask
+        self.diag_end_mask = eigenvalue_mask
 
     def build(self, input_shape):
 
@@ -117,11 +120,18 @@ class Spectral(Layer):
         self.built = True
 
     def call(self, inputs, **kwargs):
-        kernel = mul(self.base, self.diag_start - self.diag_end)
+        if self.diag_end_mask is not None:
+            diag_end = self.diag_end * self.diag_end_mask
+            bias = self.bias * self.diag_end_mask
+        else:
+            diag_end = self.diag_end
+            bias = self.bias
+
+        kernel = mul(self.base, self.diag_start - diag_end)
         outputs = matmul(a=inputs, b=kernel)
 
         if self.use_bias:
-            outputs = outputs + self.bias
+            outputs = outputs + bias
 
         if self.activation is not None:
             outputs = self.activation(outputs)
@@ -159,20 +169,32 @@ class Spectral(Layer):
 
     def conditions(self,
                    cut_off):
+
         if np.all(self.diag_start.numpy() == 0):
             start_cond: np.ndarray = abs(self.diag_start.numpy()) >= -1
         else:
             start_cond: np.ndarray = abs(self.diag_start.numpy()) >= cut_off
 
-        branching = self.outbound_nodes[0].outbound_layer.inbound_nodes[0].inbound_layers
+        end_cond: np.ndarray = abs(self.diag_end.numpy()) >= cut_off
 
-        if isinstance(branching, list):
-            end_cond: np.ndarray = abs(self.diag_end.numpy()) >= -1
-        else:
-            end_cond: np.ndarray = abs(self.diag_end.numpy()) >= cut_off
         return {"diag_start": start_cond.reshape((-1)),
                 "diag_end": end_cond.reshape((-1))}
 
+    def mask_diag_end(self,
+                      cut_off):
+        """
+        This function sets to zero the diag_end that are below the cut_off changing the diag_end_mask. The mask will be
+        initialized to all ones and only the values that are below the cut_off will be set to zero.
+        It will be used in the pruning process.
+        :param cut_off: The cut_off value
+        :return: None
+        """
+        condition_dictionary = self.conditions(cut_off)
+        self.diag_end_mask = np.zeros(shape=self.diag_end.shape)
+        self.diag_end_mask[0, condition_dictionary["diag_end"]] = 1
+
+
+    # Functions for TensorFlow compatibility
     def get_config(self):
         config = super().get_config().copy()
         config.update({

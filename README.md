@@ -44,11 +44,15 @@ pruning function are developed. In the future other configurations support will 
 If `is_base_trainable=True` the eigenvectors of the adjacency matrix will be trained. This is equivalent to the
 training of all the connections (features). Those are `input_dim x output_dim`
 trainable parameters.<br>
-`is_diag_start_trainable` (default set to `False`) train the first `input_dim` eigenvalues of the matrix and `is_diag_end_trainable` trains the last 
-`output_dim` eigenvalues. The total number of trainable parameters is therefore `input_dim x output_dim + input_dim + output_dim`.
+`is_input_layer` (default set to `False`) train the first `input_dim` eigenvalues of the matrix and `is_diag_end_trainable` trains the last 
+`output_dim` eigenvalues. We recommend to set `is_input_layer` to `True` only for the first layer of the network and 
+leave it to False for the other layers. This is because the behaviour of the pruning algorithm has been tested and heuristically proven effective 
+only when in this setting.<br>
+The total number of trainable parameters is therefore `input_dim x output_dim + input_dim + output_dim`.
 If only the eigenvalues are trained the number of free parameters drops but the learning still occurs. A 
 suboptimal loss minimum is reached but overfitting is less likely to occur. If also eigenvectors are trained the layer
 is, from a training point of view, the same as the Dense.<br>
+
 
 ## Spectral Pruning
 The pruning function are tested with **Functional** or **Sequential** models implementing one or more Spectral layers.
@@ -56,18 +60,14 @@ Best pruning results are achived when also an L2 regularization is applied to th
 There are two ways in which the pruning can be done:
 1. **Percentile based Pruning**: the pruning is done according to the eigenvalues distribution of every spectral layer in
 the model. The nodes with the smallest eigenvalues magnitude (according to the percentile given) are removed. The percentile of nodes to be removed is passed as
-an argument to the function.
+an argument to the function. The compile configuration is needed
 It can be called as follows:
 ```python
-from spectraltools import prune_percentile, 
+from spectraltools import prune_percentile
 
-# In place pruning
-prune_percentile(model,
-                percentile_threshold)
-# Copy pruning
-pruned_copy = prune_percentile(model,
-                               percentile_threshold,
-                               copy=True)
+pruned_model = prune_percentile(model,
+                                percentile,
+                                percentile_threshold)
 ```
 model: `Sequential` or `Functional` model, employing one or more Spectral layers, that needs to be pruned.
 percentile_threshold: the percentile (1-100) of nodes that the model should try to prune. The pruning is done by masking 
@@ -95,12 +95,14 @@ that is given.
 from spectraltools import metric_based_pruning
 metric_based_pruning(model,
                      eval_dictionary,
+                     compile_dictionary,
                      compare_metric='accuracy',
                      max_delta_percent=10,
                      **kwargs)
 ```
 `model`: the trained model to be pruned.<br>
 `eval_dictionary`: the dictionary with the arguments to be passed to the `evaluate` method of the model.<br>
+`compile_dictionary`: the dictionary with the arguments to be passed to the `compile` method of the model.<br>
 `max_delta_percent`: maximal variation of the given indicator at which break the pruning process.<br>
 `compare_metric`: indicator to be used (the corresponding metric name should be used while compiling the model) <br>
 

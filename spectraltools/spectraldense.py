@@ -9,6 +9,7 @@ from tensorflow.python.util.tf_export import keras_export
 from tensorflow import multiply as mul
 from tensorflow import reduce_sum
 from tensorflow import matmul
+import tensorflow as tf
 from tensorflow.python.framework import tensor_shape
 import numpy as np
 
@@ -19,10 +20,11 @@ class Spectral(Layer):
                  units,
                  activation=None,
                  is_base_trainable=True,
-                 is_diag_start_trainable=False,
                  is_diag_end_trainable=True,
+                 is_diag_start_trainable=False,
                  use_bias=False,
-                 eigenvalue_mask=None,
+                 diag_end_mask=None,
+                 diag_start_mask=None,
                  base_initializer='GlorotUniform',
                  diag_start_initializer='Zeros',
                  diag_end_initializer='Ones',
@@ -42,8 +44,8 @@ class Spectral(Layer):
         self.activation = activations.get(activation)
         # Trainable weights
         self.is_base_trainable = is_base_trainable
-        self.is_diag_start_trainable = is_diag_start_trainable
         self.is_diag_end_trainable = is_diag_end_trainable
+        self.is_diag_start_trainable = is_diag_start_trainable
         self.use_bias = use_bias
         # Initializers
         self.base_initializer = initializers.get(base_initializer),
@@ -58,8 +60,7 @@ class Spectral(Layer):
         self.base_constraint = constraints.get(base_constraint)
         self.diag_constraint = constraints.get(diag_constraint)
         self.bias_constraint = constraints.get(bias_constraint)
-        # Mask
-        self.diag_end_mask = eigenvalue_mask
+
 
     def build(self, input_shape):
 
@@ -68,6 +69,15 @@ class Spectral(Layer):
         if last_dim is None:
             raise ValueError('The last dimension of the inputs to `Dense` '
                              'should be defined. Found `None`.')
+
+        # Mask for pruning the eigenvalues (the linear features)
+        self.diag_end_mask = self.add_weight(
+            name='diag_end_mask',
+            shape=(1, self.units),
+            initializer='ones',
+            trainable=False,
+            dtype=self.dtype
+        )
 
         # trainable eigenvector elements matrix
         # \phi_ij
@@ -97,7 +107,7 @@ class Spectral(Layer):
         self.diag_start = self.add_weight(
             name='diag_start',
             shape=(last_dim, 1),
-            initializer=self.diag_start_initializer[0],
+            initializer='zeros',
             regularizer=self.diag_regularizer,
             constraint=self.diag_constraint,
             dtype=self.dtype,
@@ -120,17 +130,14 @@ class Spectral(Layer):
         self.built = True
 
     def call(self, inputs, **kwargs):
-        if self.diag_end_mask is not None:
-            diag_end = self.diag_end * self.diag_end_mask
-            bias = self.bias * self.diag_end_mask
-        else:
-            diag_end = self.diag_end
-            bias = self.bias
 
+        diag_end = mul(self.diag_end, self.diag_end_mask)
         kernel = mul(self.base, self.diag_start - diag_end)
+        
         outputs = matmul(a=inputs, b=kernel)
 
         if self.use_bias:
+            bias = mul(self.bias, self.diag_end_mask)
             outputs = outputs + bias
 
         if self.activation is not None:
@@ -155,30 +162,10 @@ class Spectral(Layer):
         phi[c:, :c] = self.base.numpy().T
         return phi
 
-    def return_diag(self):
-        """
-        Returns the eigenvalues as [start, end]. Start are in relation with the first neurons and end with the last
-        of the linear transfer between layer k and k+1
-        """
-        if self.is_diag_start_trainable and self.is_diag_end_trainable:
-            return np.concatenate([self.diag_start.numpy().reshape([-1]), self.diag_end.numpy().reshape([-1])], axis=0)
-        elif self.is_diag_start_trainable and not self.is_diag_end_trainable:
-            return self.diag_start.numpy().reshape([-1])
-        elif not self.is_diag_start_trainable and self.is_diag_end_trainable:
-            return self.diag_end.numpy().reshape([-1])
-
     def conditions(self,
                    cut_off):
-
-        if np.all(self.diag_start.numpy() == 0):
-            start_cond: np.ndarray = abs(self.diag_start.numpy()) >= -1
-        else:
-            start_cond: np.ndarray = abs(self.diag_start.numpy()) >= cut_off
-
-        end_cond: np.ndarray = abs(self.diag_end.numpy()) >= cut_off
-
-        return {"diag_start": start_cond.reshape((-1)),
-                "diag_end": end_cond.reshape((-1))}
+        masking_conditions: np.ndarray = abs(self.diag_end.numpy()) >= cut_off
+        return masking_conditions.reshape(-1)
 
     def mask_diag_end(self,
                       cut_off):
@@ -189,10 +176,21 @@ class Spectral(Layer):
         :param cut_off: The cut_off value
         :return: None
         """
-        condition_dictionary = self.conditions(cut_off)
-        self.diag_end_mask = np.zeros(shape=self.diag_end.shape)
-        self.diag_end_mask[0, condition_dictionary["diag_end"]] = 1
+        masking_conditions = self.conditions(cut_off)
+        tmp = np.zeros(shape=self.diag_end.shape)
+        tmp[0, masking_conditions] = 1
+        self.diag_end_mask.assign(tmp)
 
+    def get_eigenvalues(self, masked=False):
+        """
+        This function returns the eigenvalues of the layer. Check that at least one between is_diag_end_trainable and
+        is_diag_start_trainable is True, otherwise returns an error. If is_diag_end_trainable is True, it returns diag_end. If also
+        is_diag_start_trainable is True, it returns diag_start and diag_end as a concatenated vector.
+        """
+        eigenvalues = {'diag_end': self.diag_end.numpy(), 'diag_start': self.diag_start.numpy()}
+        if masked:
+            eigenvalues['diag_end'] *= self.diag_end_mask
+        return eigenvalues
 
     # Functions for TensorFlow compatibility
     def get_config(self):

@@ -93,12 +93,12 @@ metric calculated on the dataset. The nodes with the smallest impact are removed
 that is given.
 ```python
 from spectraltools import metric_based_pruning
-metric_based_pruning(model,
-                     eval_dictionary,
-                     compile_dictionary,
-                     compare_metric='accuracy',
-                     max_delta_percent=10,
-                     **kwargs)
+pruned_model = metric_based_pruning(model,
+                                    eval_dictionary,
+                                    compile_dictionary,
+                                    compare_metric='accuracy',
+                                    max_delta_percent=10,
+                                    **kwargs)
 ```
 `model`: the trained model to be pruned.<br>
 `eval_dictionary`: the dictionary with the arguments to be passed to the `evaluate` method of the model.<br>

@@ -72,7 +72,7 @@ def prune_percentile(model: Model, percentile_threshold: float, compile_dictiona
     :param compile_dictionary: Dictionary containing the compilation parameters
     :param model: The neural network model to be pruned
     :param percentile_threshold: Percentile for pruning
-    :return: Optionally returns the pruned model copy
+    :return: Return the pruned model
     """
     if percentile_threshold < 0 or percentile_threshold > 100:
         raise ValueError("Percentile must be between 0 and 100.")
@@ -110,7 +110,7 @@ def metric_based_pruning(model: Model,
     :param max_delta_percent: Maximum delta in the metric before stopping the pruning
     :param eval_dictionary: Dictionary containing the evaluation parameters.
     :param kwargs: Optional arguments for the percentile_step (default 5)
-    :return:
+    :return: The pruned model
     """
 
     # Get the metric from the model

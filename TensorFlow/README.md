@@ -19,8 +19,10 @@ from spectraltools import Spectral
 ~~~
 It is a representation in the reciprocal space of a fully connected layer.<br>
 The layer can be used inside a Tensorflow model and has three main attributes:
+
 ~~~python
-from spectraltools import Spectral
+from TensorFlow.spectraltools import Spectral
+
 Spectral(
     units=300,
     activation='relu',
@@ -62,8 +64,9 @@ There are two ways in which the pruning can be done:
 the model. The nodes with the smallest eigenvalues magnitude (according to the percentile given) are removed. The percentile of nodes to be removed is passed as
 an argument to the function. The compile configuration is needed
 It can be called as follows:
+
 ```python
-from spectraltools import prune_percentile
+from TensorFlow.spectraltools import prune_percentile
 
 pruned_model = prune_percentile(model,
                                 percentile,
@@ -73,15 +76,16 @@ model: `Sequential` or `Functional` model, employing one or more Spectral layers
 percentile_threshold: the percentile (1-100) of nodes that the model should try to prune. The pruning is done by masking 
 the eigenvalues of the spectral layers which is equivalent to set all the corresponding features and biases to 0. <br>
 #### Example:
+
 ```python
 from tensorflow.keras.layers import Dense, Input
-from spectraltools import Spectral
+from TensorFlow.spectraltools import Spectral
 
 inputs = Input(shape=(784,))
-x = Dense(100, 
+x = Dense(100,
           activation='relu')(inputs)
-x = Spectral(80, 
-            activation='relu')(x)
+x = Spectral(80,
+             activation='relu')(x)
 ```
 
 In this case the prunable nodes will be 80.<br>
@@ -91,8 +95,10 @@ distribution which has been empirically and heuristically proven to be an indica
 2. **Metric based Pruning**: the pruning is done according to the impact that the removal of a node has on the loss or another 
 metric calculated on the dataset. The nodes with the smallest impact are removed. The impact is calculated by training the model on a validation set.
 that is given.
+
 ```python
-from spectraltools import metric_based_pruning
+from TensorFlow.spectraltools import metric_based_pruning
+
 pruned_model = metric_based_pruning(model,
                                     eval_dictionary,
                                     compile_dictionary,

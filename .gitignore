@@ -1,3 +1,4 @@
 /TensorFlow/test/
 /TensorFlow/spectraltools/spectralprune_experimental.py
 .idea/
+.gitignore

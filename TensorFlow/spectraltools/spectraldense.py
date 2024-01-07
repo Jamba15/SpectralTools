@@ -9,28 +9,28 @@ from tensorflow.python.util.tf_export import keras_export
 from tensorflow import multiply as mul
 from tensorflow import reduce_sum
 from tensorflow import matmul
-import tensorflow as tf
 from tensorflow.python.framework import tensor_shape
+from tensorflow_model_optimization.sparsity.keras import PrunableLayer
+
 import numpy as np
 
-
 @keras_export('keras.layers.Spectral')
-class Spectral(Layer):
+class Spectral(Layer, PrunableLayer):
     def __init__(self,
                  units,
                  activation=None,
                  is_base_trainable=True,
-                 is_diag_end_trainable=True,
                  is_diag_start_trainable=False,
+                 is_diag_end_trainable=True,
                  use_bias=False,
-                 diag_end_mask=None,
-                 diag_start_mask=None,
+                 eigenvalue_mask=None,
                  base_initializer='GlorotUniform',
                  diag_start_initializer='Zeros',
                  diag_end_initializer='Ones',
                  bias_initializer='Zeros',
                  base_regularizer=None,
                  diag_regularizer=None,
+                 diag_regularizer_param=5E-4,
                  bias_regularizer=None,
                  activity_regularizer=None,
                  base_constraint=None,
@@ -44,23 +44,34 @@ class Spectral(Layer):
         self.activation = activations.get(activation)
         # Trainable weights
         self.is_base_trainable = is_base_trainable
-        self.is_diag_end_trainable = is_diag_end_trainable
         self.is_diag_start_trainable = is_diag_start_trainable
+        self.is_diag_end_trainable = is_diag_end_trainable
         self.use_bias = use_bias
         # Initializers
         self.base_initializer = initializers.get(base_initializer),
         self.diag_start_initializer = initializers.get(diag_start_initializer),
         self.diag_end_initializer = initializers.get(diag_end_initializer),
         self.bias_initializer = initializers.get(bias_initializer),
-        # Regularizers
-        self.base_regularizer = regularizers.get(base_regularizer)
-        self.diag_regularizer = regularizers.get(diag_regularizer)
+        # Regularizer
+        if base_regularizer is not None:
+            self.base_regularizer = regularizers.get(base_regularizer)
+        else:
+            self.base_regularizer = None
+        if diag_regularizer == 'l2':
+            self.diag_regularizer = regularizers.l2(diag_regularizer_param)
+        else:
+            # Deal with None
+            if diag_regularizer is not None:
+                self.diag_regularizer = regularizers.get(diag_regularizer)
+            else:
+                self.diag_regularizer = None
         self.bias_regularizer = regularizers.get(bias_regularizer)
         # Constraint
         self.base_constraint = constraints.get(base_constraint)
         self.diag_constraint = constraints.get(diag_constraint)
         self.bias_constraint = constraints.get(bias_constraint)
-
+        # Mask
+        self.eigenvalue_mask = eigenvalue_mask
 
     def build(self, input_shape):
 
@@ -69,15 +80,6 @@ class Spectral(Layer):
         if last_dim is None:
             raise ValueError('The last dimension of the inputs to `Dense` '
                              'should be defined. Found `None`.')
-
-        # Mask for pruning the eigenvalues (the linear features)
-        self.diag_end_mask = self.add_weight(
-            name='diag_end_mask',
-            shape=(1, self.units),
-            initializer='ones',
-            trainable=False,
-            dtype=self.dtype
-        )
 
         # trainable eigenvector elements matrix
         # \phi_ij
@@ -107,7 +109,7 @@ class Spectral(Layer):
         self.diag_start = self.add_weight(
             name='diag_start',
             shape=(last_dim, 1),
-            initializer='zeros',
+            initializer=self.diag_start_initializer[0],
             regularizer=self.diag_regularizer,
             constraint=self.diag_constraint,
             dtype=self.dtype,
@@ -117,7 +119,7 @@ class Spectral(Layer):
         # bias
         if self.use_bias:
             self.bias = self.add_weight(
-                name='bias',
+                name='spectral_bias',
                 shape=(self.units,),
                 initializer=self.bias_initializer[0],
                 regularizer=self.bias_regularizer,
@@ -130,15 +132,16 @@ class Spectral(Layer):
         self.built = True
 
     def call(self, inputs, **kwargs):
+        if self.eigenvalue_mask is not None:
+            diag_end = self.diag_end * self.eigenvalue_mask
+        else:
+            diag_end = self.diag_end
 
-        diag_end = mul(self.diag_end, self.diag_end_mask)
         kernel = mul(self.base, self.diag_start - diag_end)
-        
         outputs = matmul(a=inputs, b=kernel)
 
         if self.use_bias:
-            bias = mul(self.bias, self.diag_end_mask)
-            outputs = outputs + bias
+            outputs = outputs + self.bias
 
         if self.activation is not None:
             outputs = self.activation(outputs)
@@ -152,6 +155,11 @@ class Spectral(Layer):
         """
         return mul(self.base, self.diag_start - self.diag_end).numpy().T
 
+    def get_prunable_weights(self):
+        # Return a list of weights to be pruned. Usually the main weights of the layer.
+        # Adjust this based on your layer's structure.
+        return [self.base, self.diag_end]
+
     def return_base(self):
         """
         Returns the base matrix in the direct space, namely, the classical weights
@@ -162,37 +170,20 @@ class Spectral(Layer):
         phi[c:, :c] = self.base.numpy().T
         return phi
 
-    def conditions(self,
-                   cut_off):
-        masking_conditions: np.ndarray = abs(self.diag_end.numpy()) >= cut_off
-        return masking_conditions.reshape(-1)
+    def return_diag(self):
+        """
+        Returns the eigenvalues as [start, end]. Start are in relation with the first neurons and end with the last
+        of the linear transfer between layer k and k+1
+        """
+        if self.is_diag_start_trainable and self.is_diag_end_trainable:
+            return np.concatenate([self.diag_start.numpy().reshape([-1]), self.diag_end.numpy().reshape([-1])], axis=0)
+        elif self.is_diag_start_trainable and not self.is_diag_end_trainable:
+            return self.diag_start.numpy().reshape([-1])
+        elif not self.is_diag_start_trainable and self.is_diag_end_trainable:
+            return self.diag_end.numpy().reshape([-1])
 
-    def mask_diag_end(self,
-                      cut_off):
-        """
-        This function sets to zero the diag_end that are below the cut_off changing the diag_end_mask. The mask will be
-        initialized to all ones and only the values that are below the cut_off will be set to zero.
-        It will be used in the pruning process.
-        :param cut_off: The cut_off value
-        :return: None
-        """
-        masking_conditions = self.conditions(cut_off)
-        tmp = np.zeros(shape=self.diag_end.shape)
-        tmp[0, masking_conditions] = 1
-        self.diag_end_mask.assign(tmp)
 
-    def get_eigenvalues(self, masked=False):
-        """
-        This function returns the eigenvalues of the layer. Check that at least one between is_diag_end_trainable and
-        is_diag_start_trainable is True, otherwise returns an error. If is_diag_end_trainable is True, it returns diag_end. If also
-        is_diag_start_trainable is True, it returns diag_start and diag_end as a concatenated vector.
-        """
-        eigenvalues = {'diag_end': self.diag_end.numpy(), 'diag_start': self.diag_start.numpy()}
-        if masked:
-            eigenvalues['diag_end'] *= self.diag_end_mask
-        return eigenvalues
 
-    # Functions for TensorFlow compatibility
     def get_config(self):
         config = super().get_config().copy()
         config.update({

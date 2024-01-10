@@ -1,5 +1,5 @@
 import torch.nn as nn
-from .spectraldense import Spectral
+from spectraldense import Spectral
 
 def get_layer(model, name):
     layer = model

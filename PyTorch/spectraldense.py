@@ -52,7 +52,7 @@ class Spectral(nn.Module):
         nn.init.ones_(self.eigvals)
 
     def forward(self, x):
-        return torch.mul(x, self.eigval)
+        return torch.mul(x, self.eigvals)
 
     def extra_repr(self) -> str:
         s='{dim}, eigval_grad={eigval_grad}'
